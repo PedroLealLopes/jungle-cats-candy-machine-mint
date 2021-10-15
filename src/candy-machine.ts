@@ -1,10 +1,6 @@
 import * as anchor from "@project-serum/anchor";
 
-import {
-  MintLayout,
-  TOKEN_PROGRAM_ID,
-  Token,
-} from "@solana/spl-token";
+import { MintLayout, TOKEN_PROGRAM_ID, Token } from "@solana/spl-token";
 
 export const CANDY_MACHINE_PROGRAM = new anchor.web3.PublicKey(
   "cndyAnrLdpjq1Ssp1z8xxDsB8dxe7u4HL5Nxi2K5WXZ"
@@ -19,7 +15,7 @@ const TOKEN_METADATA_PROGRAM_ID = new anchor.web3.PublicKey(
 );
 
 export interface CandyMachine {
-  id: anchor.web3.PublicKey,
+  id: anchor.web3.PublicKey;
   connection: anchor.web3.Connection;
   program: anchor.Program;
 }
@@ -29,7 +25,8 @@ interface CandyMachineState {
   itemsAvailable: number;
   itemsRedeemed: number;
   itemsRemaining: number;
-  goLiveDate: Date,
+  goLiveDate: Date;
+  tokenMint?: anchor.web3.PublicKey;
 }
 
 export const awaitTransactionSignatureConfirmation = async (
@@ -119,7 +116,7 @@ export const awaitTransactionSignatureConfirmation = async (
   done = true;
   console.log("Returning status", status);
   return status;
-}
+};
 
 /* export */ const createAssociatedTokenAccountInstruction = (
   associatedTokenAddress: anchor.web3.PublicKey,
@@ -149,34 +146,32 @@ export const awaitTransactionSignatureConfirmation = async (
     programId: SPL_ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID,
     data: Buffer.from([]),
   });
-}
+};
 
 export const getCandyMachineState = async (
   anchorWallet: anchor.Wallet,
   candyMachineId: anchor.web3.PublicKey,
-  connection: anchor.web3.Connection,
+  connection: anchor.web3.Connection
 ): Promise<CandyMachineState> => {
   const provider = new anchor.Provider(connection, anchorWallet, {
     preflightCommitment: "recent",
   });
 
-  const idl = await anchor.Program.fetchIdl(
-    CANDY_MACHINE_PROGRAM,
-    provider
-  );
+  const idl = await anchor.Program.fetchIdl(CANDY_MACHINE_PROGRAM, provider);
 
   const program = new anchor.Program(idl, CANDY_MACHINE_PROGRAM, provider);
   const candyMachine = {
     id: candyMachineId,
     connection,
     program,
-  }
+  };
 
   const state: any = await program.account.candyMachine.fetch(candyMachineId);
 
   const itemsAvailable = state.data.itemsAvailable.toNumber();
   const itemsRedeemed = state.itemsRedeemed.toNumber();
   const itemsRemaining = itemsAvailable - itemsRedeemed;
+  const tokenMint = state.tokenMint;
 
   let goLiveDate = state.data.goLiveDate.toNumber();
   goLiveDate = new Date(goLiveDate * 1000);
@@ -186,7 +181,7 @@ export const getCandyMachineState = async (
     itemsRedeemed,
     itemsRemaining,
     goLiveDate,
-  })
+  });
 
   return {
     candyMachine,
@@ -194,8 +189,9 @@ export const getCandyMachineState = async (
     itemsRedeemed,
     itemsRemaining,
     goLiveDate,
+    tokenMint,
   };
-}
+};
 
 const getMasterEdition = async (
   mint: anchor.web3.PublicKey
@@ -245,6 +241,7 @@ export const mintOneToken = async (
   config: anchor.web3.PublicKey, // feels like this should be part of candyMachine?
   payer: anchor.web3.PublicKey,
   treasury: anchor.web3.PublicKey,
+  associatedTokenAccountAddress?: anchor.web3.PublicKey
 ): Promise<string> => {
   const mint = anchor.web3.Keypair.generate();
   const token = await getTokenWallet(payer, mint.publicKey);
@@ -255,6 +252,21 @@ export const mintOneToken = async (
   const rent = await connection.getMinimumBalanceForRentExemption(
     MintLayout.span
   );
+
+  const remainingAccounts = [];
+  if (associatedTokenAccountAddress) {
+    console.log("here", associatedTokenAccountAddress);
+    remainingAccounts.push({
+      pubkey: associatedTokenAccountAddress,
+      isWritable: true,
+      isSigner: false,
+    });
+    remainingAccounts.push({
+      pubkey: payer,
+      isWritable: false,
+      isSigner: true,
+    });
+  }
 
   return await program.rpc.mintNft({
     accounts: {
@@ -274,6 +286,7 @@ export const mintOneToken = async (
       clock: anchor.web3.SYSVAR_CLOCK_PUBKEY,
     },
     signers: [mint],
+    remainingAccounts,
     instructions: [
       anchor.web3.SystemProgram.createAccount({
         fromPubkey: payer,
@@ -305,7 +318,7 @@ export const mintOneToken = async (
       ),
     ],
   });
-}
+};
 
 export const shortenAddress = (address: string, chars = 4): string => {
   return `${address.slice(0, chars)}...${address.slice(-chars)}`;
@@ -313,4 +326,4 @@ export const shortenAddress = (address: string, chars = 4): string => {
 
 const sleep = (ms: number): Promise<void> => {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
+};
